@@ -231,4 +231,4 @@ MIT License
 👨‍💻 Author
 ────────────────────────────────────────────
 
-Built with ❤️ 
+Built with ❤️ by [Your Name]
