@@ -147,9 +147,9 @@ REFRESH_EXPIRY_MOBILE=2592000    # 30 days
 | /signin                     | POST   | ❌   | Login with password and device info            |
 | /send-otp                   | POST   | ❌   | Send OTP for login                             |
 | /signin-otp                 | POST   | ❌   | Login with OTP (email/phone) and device info   |
-| /getuser                    | GET    | ✅   | Admin gets all users, user gets self           |
 | /forgot-password            | POST   | ❌   | Send OTP for password reset                    |
 | /reset-password             | POST   | ❌   | Reset password using OTP                       |
+| /getuser                    | GET    | ✅   | Admin gets all users, user gets self           |
 | /session/confirm-logout     | POST   | ✅   | Confirm and revoke old session if needed       |
 
 ##  🔐 API Flows (ROLE: user)
@@ -360,44 +360,6 @@ Flow:
     - Access and refresh tokens are returned in the response.
 - All errors (invalid OTP, unverified user, expired OTP, etc.) are handled gracefully with clear messaging and appropriate HTTP status codes.
 ```
-### Get User (/getuser)
-```text
-Method: GET  
-Description: Retrieves the authenticated user's profile information using the provided access token.
-
-Headers:
-Authorization: Bearer <access_token>
-
-Success Response:
-- HTTP 200 OK  
-- JSON containing user profile data:
-  {
-    "user_id": "uuid-1234-5678",
-    "first_name": "Jane",
-    "last_name": "Doe",
-    "email": "jane@example.com",
-    "phone_number": "+911234567890",
-    "role": "user",
-    "is_email_verified": true,
-    "is_phone_verified": true
-  }
-
-Error Responses:
-- HTTP 401 Unauthorized → Missing or invalid token
-- HTTP 403 Forbidden → Token is valid but user is not authorized for this action
-- HTTP 404 Not Found → User record not found in database
-- HTTP 500 Internal Server Error → Token decoding or DB-related failure
-
-Flow:
-- Requires a valid JWT `access_token` in the `Authorization` header (format: `Bearer <token>`).
-- Server performs JWT verification using AWS Cognito's public keys to validate the token signature and expiry.
-- If the token is invalid or expired, returns 401 Unauthorized.
-- On successful verification, extracts the Cognito `sub` (UUID) from the token payload.
-- Queries the PostgreSQL `users` table to retrieve user metadata using this UUID.
-- If user is found, returns user profile including names, contact info, role, and verification statuses.
-- If user record is not found in DB, returns 404 Not Found.
-- Any internal failures (token parsing, DB errors) return 500 with meaningful messages.
-```
 
 ### Forgot Password (/forgot-password)
 ```text
@@ -478,6 +440,45 @@ Flow:
     - Cognito resets the password and the user can now log in with the new credentials.
 - All errors such as invalid/expired code, unverified user, or weak password are handled with proper HTTP codes and messages.
 - No new session is created as part of this flow. The user must log in again via `/signin`.
+```
+
+### Get User (/getuser)
+```text
+Method: GET  
+Description: Retrieves the authenticated user's profile information using the provided access token.
+
+Headers:
+Authorization: Bearer <access_token>
+
+Success Response:
+- HTTP 200 OK  
+- JSON containing user profile data:
+  {
+    "user_id": "uuid-1234-5678",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "phone_number": "+911234567890",
+    "role": "user",
+    "is_email_verified": true,
+    "is_phone_verified": true
+  }
+
+Error Responses:
+- HTTP 401 Unauthorized → Missing or invalid token
+- HTTP 403 Forbidden → Token is valid but user is not authorized for this action
+- HTTP 404 Not Found → User record not found in database
+- HTTP 500 Internal Server Error → Token decoding or DB-related failure
+
+Flow:
+- Requires a valid JWT `access_token` in the `Authorization` header (format: `Bearer <token>`).
+- Server performs JWT verification using AWS Cognito's public keys to validate the token signature and expiry.
+- If the token is invalid or expired, returns 401 Unauthorized.
+- On successful verification, extracts the Cognito `sub` (UUID) from the token payload.
+- Queries the PostgreSQL `users` table to retrieve user metadata using this UUID.
+- If user is found, returns user profile including names, contact info, role, and verification statuses.
+- If user record is not found in DB, returns 404 Not Found.
+- Any internal failures (token parsing, DB errors) return 500 with meaningful messages.
 ```
 
 ### Confirm Logout of Previous Session (/session/confirm-logout)
