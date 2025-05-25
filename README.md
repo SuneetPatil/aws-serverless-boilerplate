@@ -166,7 +166,8 @@ Request Body:
   "email": "jane@example.com",
   "phone_number": "+911234567890",
   "password": "StrongPassword123!",
-  "role": "user"
+  "role": "user",
+  "device": "browser"
 }
 
 Success Response:
@@ -202,13 +203,15 @@ Request Body:
 {
   "email": "jane@example.com",    // OR
   "phone_number": "+911234567890",
-  "code": "123456"
+  "code": "123456",
+  "role": "user",
+  "device": "browser"
 }
 
 Success Response:
 - HTTP 200 OK
-- JSON indicating verification success
-- Returns OAuth tokens if both email and phone are verified
+- JSON indicating verification success with access and refresh tokens
+- If an active session exists, response may include a flag to confirm logout of previous session
 
 Error Responses:
 - HTTP 400 Bad Request → Missing or invalid fields (email/phone/code)
@@ -224,29 +227,103 @@ Flow:
         - If the other attribute (email or phone) also exists and is not yet verified:
             - Triggers Cognito to send OTP for that unverified attribute using IAM Programmatic User permissions.
         - If both attributes are verified:
-            - Issues OAuth tokens (if automatic login post-verification is supported).
+            - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
+            - If another active session is found:
+                - Returns a flag prompting the user to confirm logout of the previous session.
+                - New session is not created until the previous one is revoked (SSO enforcement).
+            - If no other session exists:
+                - Creates a new session entry in the DB, tied to user ID and device type.
+                - Stores refresh token and session expiry.
+        - Tokens are returned in the response.
 - All errors (invalid code, user not found, etc.) are handled gracefully with structured messages and proper HTTP status codes.
 ```
+
 ### Sign In with Password (/signin)
-POST /signin
+```text
+Method: POST
+Description: Authenticates a user using email, phone number, or username with a password and device type.
+
+Request Body:
 {
-  "username": "jane@example.com",
+  "username": "jane@example.com",   // can be email, phone_number, or Cognito username (UUID)
   "password": "StrongPassword123!",
-  "device": "browser"
+  "role": "user",
+  "device": "browser"               // values: "browser" or "mobile"
 }
 
-- Chooses Cognito client based on device
-- If another session exists, prompts for logout
+Success Response:
+- HTTP 200 OK
+- JSON with access and refresh tokens
+- If an active session exists, response may include a flag to confirm logout of previous session
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid input fields
+- HTTP 401 Unauthorized → Invalid credentials or user not verified
+- HTTP 403 Forbidden → Account disabled or not confirmed
+- HTTP 500 Internal Server Error → Cognito or DB-related failure
+
+Flow:
+- Determines the device type (`browser` or `mobile`) and selects the corresponding Cognito App Client ID.
+    - `browser` → 30 min access / 1 hour refresh
+    - `mobile` → 1 day access / 30 days refresh
+- Authenticates the user with Cognito using the provided username and password.
+    - Username can be an email, phone number, or UUID (Cognito username).
+    - Identify using REGEX - Numeric(phone_number), AlphaNumber(UUID), and include @(special character for email)
+- On successful authentication:
+    - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
+    - If another active session is found:
+        - Returns a flag prompting the user to confirm logout of the previous session.
+        - New session is not created until the previous one is revoked (SSO enforcement).
+    - If no other session exists:
+        - Creates a new session entry in the DB, tied to user ID and device type.
+        - Stores refresh token and session expiry.
+- Tokens are returned in the response.
+- All errors (invalid password, user not found, unverified email/phone) are handled gracefully and returned with appropriate HTTP status codes and messages.
+```
 
 ### Sign In with OTP (/signin-otp)
-POST /signin-otp
+```text
+Method: POST  
+Description: Authenticates a user using an OTP sent to their registered email or phone number, based on the device type.
+
+Request Body:
 {
-  "username": "jane@example.com",
+  "email": "jane@example.com",         // OR
+  "phone_number": "+911234567890",
   "otp": "123456",
-  "device": "mobile"
+  "role": "user",
+  "device": "mobile"                   // values: "browser" or "mobile"
 }
 
-- Logs in with OTP only (no password)
+Success Response:
+- HTTP 200 OK
+- JSON with access and refresh tokens
+- If an active session exists, response may include a flag to confirm logout of previous session
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid fields (email/phone/otp)
+- HTTP 401 Unauthorized → Incorrect OTP or user not verified
+- HTTP 403 Forbidden → OTP expired or account disabled
+- HTTP 404 Not Found → User not found
+- HTTP 500 Internal Server Error → Cognito or DB-related failure
+
+Flow:
+- Determines the device type (`browser` or `mobile`) and selects the corresponding Cognito App Client ID:
+    - `browser` → 30 min access / 1 hour refresh
+    - `mobile` → 1 day access / 30 days refresh
+- Identifies the user based on the provided `email` or `phone_number`.
+- Uses Cognito’s `AdminInitiateAuth` with `CUSTOM_AUTH` or `OTP` challenge flow to verify OTP.
+- On successful authentication:
+    - Checks in the PostgreSQL `sessions` table if an active session already exists for the user.
+    - If another active session is found:
+        - Returns a flag prompting the user to confirm logout of the previous session.
+        - New session is not created until the previous one is revoked (SSO enforcement).
+    - If no other session exists:
+        - Creates a new session entry in the DB tied to user ID and device type.
+        - Stores refresh token and session expiry.
+    - Access and refresh tokens are returned in the response.
+- All errors (invalid OTP, unverified user, expired OTP, etc.) are handled gracefully with clear messaging and appropriate HTTP status codes.
+```
 
 ### Send OTP (/send-otp)
 POST /send-otp
