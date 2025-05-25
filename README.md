@@ -145,11 +145,11 @@ REFRESH_EXPIRY_MOBILE=2592000    # 30 days
 | /signup                     | POST   | ❌   | Register with email, phone, and password       |
 | /confirm                    | POST   | ❌   | Confirm signup using OTP                       |
 | /signin                     | POST   | ❌   | Login with password and device info            |
-| /signin-otp                 | POST   | ❌   | Login with OTP (email/phone) and device info   |
 | /send-otp                   | POST   | ❌   | Send OTP for login                             |
+| /signin-otp                 | POST   | ❌   | Login with OTP (email/phone) and device info   |
+| /getuser                    | GET    | ✅   | Admin gets all users, user gets self           |
 | /forgot-password            | POST   | ❌   | Send OTP for password reset                    |
 | /reset-password             | POST   | ❌   | Reset password using OTP                       |
-| /getuser                    | GET    | ✅   | Admin gets all users, user gets self           |
 | /session/confirm-logout     | POST   | ✅   | Confirm and revoke old session if needed       |
 
 ##  🔐 API Flows (ROLE: user)
@@ -281,6 +281,42 @@ Flow:
 - All errors (invalid password, user not found, unverified email/phone) are handled gracefully and returned with appropriate HTTP status codes and messages.
 ```
 
+### Send OTP (/send-otp)
+```text
+Method: POST  
+Description: Sends a One-Time Password (OTP) to the user's verified or unverified email or phone number for login or verification purposes.
+
+Request Body:
+{
+  "email": "jane@example.com",        // OR
+  "phone_number": "+911234567890",
+  "device": "mobile",                 // values: "browser" or "mobile"
+  "role": "user"
+}
+
+Success Response:
+- HTTP 200 OK
+- JSON indicating that OTP was sent successfully
+  e.g., { "message": "OTP sent to your email/phone number." }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid input fields
+- HTTP 404 Not Found → User not found
+- HTTP 409 Conflict → Email or phone number already verified (if contextually invalid)
+- HTTP 500 Internal Server Error → Cognito-related issue or other failures
+
+Flow:
+- Validates the request to ensure either `email` or `phone_number` is provided, along with `device` and `role`.
+- Identifies the user in AWS Cognito using IAM Programmatic User permissions based on the provided email or phone number.
+- Checks whether the corresponding attribute (email/phone) exists and is not disabled.
+- Triggers Cognito to send an OTP:
+    - If the user is signing in → Initiates an authentication challenge with CUSTOM_AUTH flow.
+    - If the user is verifying their account (e.g., after signup) → Uses `AdminCreateUser`/`AdminUpdateUserAttributes` to resend confirmation code.
+- Handles duplicate OTP triggers gracefully (e.g., cooldown enforcement if needed).
+- Returns success message or error response accordingly.
+- All exceptions are logged and surfaced through appropriate error codes and messages.
+```
+
 ### Sign In with OTP (/signin-otp)
 ```text
 Method: POST  
@@ -292,7 +328,7 @@ Request Body:
   "phone_number": "+911234567890",
   "otp": "123456",
   "role": "user",
-  "device": "mobile"                   // values: "browser" or "mobile"
+  "device": "browser"                   // values: "browser" or "mobile"
 }
 
 Success Response:
@@ -324,34 +360,125 @@ Flow:
     - Access and refresh tokens are returned in the response.
 - All errors (invalid OTP, unverified user, expired OTP, etc.) are handled gracefully with clear messaging and appropriate HTTP status codes.
 ```
+### Get User (/getuser)
+```text
+Method: GET  
+Description: Retrieves the authenticated user's profile information using the provided access token.
 
-### Send OTP (/send-otp)
-POST /send-otp
-{
-  "username": "jane@example.com"
-}
-→ Sends OTP to registered email/phone
+Headers:
+Authorization: Bearer <access_token>
+
+Success Response:
+- HTTP 200 OK  
+- JSON containing user profile data:
+  {
+    "user_id": "uuid-1234-5678",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "phone_number": "+911234567890",
+    "role": "user",
+    "is_email_verified": true,
+    "is_phone_verified": true
+  }
+
+Error Responses:
+- HTTP 401 Unauthorized → Missing or invalid token
+- HTTP 403 Forbidden → Token is valid but user is not authorized for this action
+- HTTP 404 Not Found → User record not found in database
+- HTTP 500 Internal Server Error → Token decoding or DB-related failure
+
+Flow:
+- Requires a valid JWT `access_token` in the `Authorization` header (format: `Bearer <token>`).
+- Server performs JWT verification using AWS Cognito's public keys to validate the token signature and expiry.
+- If the token is invalid or expired, returns 401 Unauthorized.
+- On successful verification, extracts the Cognito `sub` (UUID) from the token payload.
+- Queries the PostgreSQL `users` table to retrieve user metadata using this UUID.
+- If user is found, returns user profile including names, contact info, role, and verification statuses.
+- If user record is not found in DB, returns 404 Not Found.
+- Any internal failures (token parsing, DB errors) return 500 with meaningful messages.
+```
 
 ### Forgot Password (/forgot-password)
-POST /forgot-password
+```text
+Method: POST  
+Description: Initiates the password reset flow by sending an OTP to the user's registered email or phone number.
+
+Request Body:
 {
-  "username": "jane@example.com"
+  "email": "jane@example.com",         // OR
+  "phone_number": "+911234567890",
+  "role": "user",
+  "device": "browser"                  // values: "browser" or "mobile"
 }
-→ Sends OTP to registered email/phone for reset
+
+Success Response:
+- HTTP 200 OK  
+- JSON message indicating that the OTP has been sent:
+  {
+    "message": "OTP sent to your registered email or phone number."
+  }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid input (no email/phone, wrong format)
+- HTTP 404 Not Found → No user found with the provided email or phone number
+- HTTP 429 Too Many Requests → Rate limit exceeded for sending OTPs
+- HTTP 500 Internal Server Error → Cognito or internal service failure
+
+Flow:
+- Accepts either `email` or `phone_number` (but not both), along with `role` and `device`.
+- Validates the input and checks for existence of the user in AWS Cognito using IAM Programmatic User permissions.
+- If user exists:
+    - Determines which Cognito App Client to use based on `device` type:
+        - `browser` → shorter expiry tokens
+        - `mobile` → longer expiry tokens
+    - Initiates Cognito’s `forgotPassword` flow which triggers an OTP to the user’s verified email or phone.
+- If the email/phone is not registered or not verified, responds with an appropriate error.
+- Prevents abuse by rate-limiting OTP sends (handled by Cognito and optionally your app logic).
+- Handles all exceptions gracefully and returns appropriate HTTP status codes and structured messages.
+```
 
 ### Reset Password (/reset-password)
-POST /reset-password
-{
-  "username": "jane@example.com",
-  "code": "123456",
-  "new_password": "NewSecurePassword@2025"
-}
-→ Verifies OTP and updates password
+```text
+Method: POST  
+Description: Completes the password reset flow by verifying the OTP and setting a new password.
 
-### Get User (/getuser)
-- Requires Authorization header with valid JWT
-- If user is admin, returns all users
-- If user is user, returns only their own profile
+Request Body:
+{
+  "email": "jane@example.com",         // OR
+  "phone_number": "+911234567890",
+  "code": "123456",
+  "new_password": "NewStrongPassword!23",
+  "role": "user",
+  "device": "browser"                  // values: "browser" or "mobile"
+}
+
+Success Response:
+- HTTP 200 OK  
+- JSON message indicating password reset success:
+  {
+    "message": "Password has been successfully reset."
+  }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid input fields
+- HTTP 401 Unauthorized → Invalid OTP or expired code
+- HTTP 403 Forbidden → User not confirmed or disabled
+- HTTP 404 Not Found → User not found with given email or phone
+- HTTP 500 Internal Server Error → Cognito or database failure
+
+Flow:
+- Accepts either `email` or `phone_number`, the OTP `code`, and the new password.
+- Validates request and identifies user in AWS Cognito using IAM Programmatic User permissions.
+- Invokes Cognito’s `confirmForgotPassword` API with:
+    - The username (derived from email or phone)
+    - The OTP code sent via `/forgot-password`
+    - The new password
+- If the OTP is valid and password meets complexity requirements:
+    - Cognito resets the password and the user can now log in with the new credentials.
+- All errors such as invalid/expired code, unverified user, or weak password are handled with proper HTTP codes and messages.
+- No new session is created as part of this flow. The user must log in again via `/signin`.
+```
 
 ### Confirm Logout of Previous Session (/session/confirm-logout)
 POST /session/confirm-logout
