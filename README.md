@@ -126,7 +126,7 @@ serverless-auth-api/
 ```
 
 ### ⚙️ Environment Variables
-
+```
 DATABASE_URL=your_neon_database_url
 
 COGNITO_USER_POOL_ID=your_user_pool_id
@@ -137,7 +137,7 @@ TOKEN_EXPIRY_BROWSER=1800        # 30 mins
 TOKEN_EXPIRY_MOBILE=86400        # 1 day
 REFRESH_EXPIRY_BROWSER=3600      # 1 hour
 REFRESH_EXPIRY_MOBILE=2592000    # 30 days
-
+```
 ##  📁 API Reference
 
 | Endpoint                    | Method | Auth | Description                                    |
