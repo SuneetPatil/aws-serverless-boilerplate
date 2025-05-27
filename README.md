@@ -66,7 +66,7 @@ Client IDs will be dynamically selected during login based on the `device` param
 
 | Role Storage | Recommendation |
 |--------------|----------------|
-| Cognito      | ❌ No (avoid Cognito groups unless IAM is involved) |
+| Cognito      | ✅ Yes – store in different user pool based on role |
 | DB           | ✅ Yes – store in users.role column |
 
 Use JWT token’s sub to fetch user and validate their role in protected routes.
@@ -138,6 +138,7 @@ TOKEN_EXPIRY_MOBILE=86400        # 1 day
 REFRESH_EXPIRY_BROWSER=3600      # 1 hour
 REFRESH_EXPIRY_MOBILE=2592000    # 30 days
 ```
+
 ##  📁 API Reference
 
 | Endpoint                    | Method | Auth | Description                                    |
@@ -180,7 +181,7 @@ Error Responses:
 - HTTP 500 Internal Server Error → Cognito or DB-related failure
 
 Flow:
-- Checks if the provided email and/or phone number already exist in AWS Cognito using IAM Programmatic User permissions.
+- Checks if the provided email and/or phone number already exist against the given role in AWS Cognito using IAM Programmatic User permissions.
 - If not, 
   - If both email and phone number are available:
       - A new user is created in Cognito with a randomly generated UUID as the username.
@@ -204,6 +205,7 @@ Request Body:
   "email": "jane@example.com",    // OR
   "phone_number": "+911234567890",
   "code": "123456",
+  "password": "StrongPassword123!",
   "role": "user",
   "device": "browser"
 }
@@ -222,19 +224,20 @@ Error Responses:
 Flow:
 - Checks if the provided email or phone number exists in AWS Cognito using IAM Programmatic User permissions.
 - If the attribute exists and is not yet verified:
-    - Confirms the user using the provided OTP code.
-    - If the attribute is already verified or After successful verification:
-        - If the other attribute (email or phone) also exists and is not yet verified:
-            - Triggers Cognito to send OTP for that unverified attribute using IAM Programmatic User permissions.
-        - If both attributes are verified:
-            - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
-            - If another active session is found:
-                - Returns a flag prompting the user to confirm logout of the previous session.
-                - New session is not created until the previous one is revoked (SSO enforcement).
-            - If no other session exists:
-                - Creates a new session entry in the DB, tied to user ID and device type.
-                - Stores refresh token and session expiry.
-        - Tokens are returned in the response.
+    - Confirms the user using the provided OTP code and password.
+    - Verify the attribute
+- If the attribute is already verified or After successful verification:
+    - If the other attribute (email or phone) also exists and is not yet verified:
+        - Triggers Cognito to send OTP for that unverified attribute using User password permissions.
+    - If both attributes are verified:
+        - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
+        - If another active session is found:
+            - Returns a flag prompting the user to confirm logout of the previous session.
+            - New session is not created until the previous one is revoked (SSO enforcement).
+        - If no other session exists:
+            - Creates a new session entry in the DB, tied to user ID and device type.
+            - Stores refresh token and session expiry.
+    - Tokens are returned in the response.
 - All errors (invalid code, user not found, etc.) are handled gracefully with structured messages and proper HTTP status codes.
 ```
 
@@ -270,14 +273,19 @@ Flow:
     - Username can be an email, phone number, or UUID (Cognito username).
     - Identify using REGEX - Numeric(phone_number), AlphaNumber(UUID), and include @(special character for email)
 - On successful authentication:
-    - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
-    - If another active session is found:
-        - Returns a flag prompting the user to confirm logout of the previous session.
-        - New session is not created until the previous one is revoked (SSO enforcement).
-    - If no other session exists:
-        - Creates a new session entry in the DB, tied to user ID and device type.
-        - Stores refresh token and session expiry.
-- Tokens are returned in the response.
+    - If user is not confirmed email and/or phone_number
+        - Cognito triggers OTP for verification:
+        - To email, if only email is provided
+        - To phone, if only phone or both email and phone is provided
+    - If user is verified
+        - Checks in the PostgreSQL `sessions` table if an active session exists for the user.
+        - If another active session is found:
+            - Returns a flag prompting the user to confirm logout of the previous session.
+            - New session is not created until the previous one is revoked (SSO enforcement).
+        - If no other session exists:
+            - Creates a new session entry in the DB, tied to user ID and device type.
+            - Stores refresh token and session expiry.
+        - Tokens are returned in the response.
 - All errors (invalid password, user not found, unverified email/phone) are handled gracefully and returned with appropriate HTTP status codes and messages.
 ```
 
@@ -350,6 +358,7 @@ Flow:
 - Identifies the user based on the provided `email` or `phone_number`.
 - Uses Cognito’s `AdminInitiateAuth` with `CUSTOM_AUTH` or `OTP` challenge flow to verify OTP.
 - On successful authentication:
+    - If attribute(email/phone_number) is not verify, explictly verify it
     - Checks in the PostgreSQL `sessions` table if an active session already exists for the user.
     - If another active session is found:
         - Returns a flag prompting the user to confirm logout of the previous session.
