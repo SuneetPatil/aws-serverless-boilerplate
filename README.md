@@ -9,15 +9,14 @@ This project is a fully serverless REST API backend built with Node.js + Express
 
 ## ✅ Key Features
 
-- 🔐 Signup with email + phone, with OTP verification to both
-- 🔑 Login using email/username/phone + password
-- 🔁 Passwordless OTP login via email or phone
-- 🆘 Forgot password + OTP-based reset
-- ✉️ Send OTP endpoint for login flows
 - 🎭 Role-based access: admin vs user
 - 📱 Device-aware token expiry:
   - Mobile: 1 day access / 30 days refresh
   - Browser: 30 min access / 1 hour refresh
+- 🔐 Signup with email + phone, with OTP verification to both
+- 🔑 Login using email/username/phone + password
+- 🔁 Passwordless OTP login via email or phone
+- 🆘 Forgot password + OTP-based reset
 - 🔐 Single Sign-On (SSO): one active session per user; logout on new login
 - REST API usable by web and mobile clients
 - Serverless deployment with API Gateway + Lambda
