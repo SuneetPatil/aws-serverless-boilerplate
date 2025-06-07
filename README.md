@@ -13,6 +13,7 @@ This project is a fully serverless REST API backend built with Node.js + Express
 - 📱 Device-aware token expiry:
   - Mobile: 1 day access / 30 days refresh
   - Browser: 30 min access / 1 hour refresh
+- 📱 Tracks device_id and ip_address for each user session to improve security, enable precise device-specific session management, support anomaly detection, and provide detailed audit trails of user session activities.
 - 🔐 Signup with email + phone, with OTP verification to both
 - 🔑 Login using email/username/phone + password
 - 🔁 Passwordless OTP login via email or phone
@@ -154,8 +155,8 @@ REFRESH_EXPIRY_MOBILE=2592000    # 30 days
 | `/getuser`                | GET    | ✅    | Admin gets all users, user gets self                                    |
 | `/session/status`         | GET    | ✅    | Check current session status for logged-in user                         |
 | `/session/logout`         | POST   | ✅    | Logs out the current session, revoking refresh tokens                   |
-| `/session/reset`          | POST   | ✅    | Logs out all sessions for a user and creates a new active session       |
-| `/session/refreshToken`   | POST   | ❌    | Generates a new access + refresh token pair using a valid refresh token |
+| `/session/reset`          | POST   | ❌    | Logs out all sessions for a user and creates a new active session       |
+| `/session/refreshToken`   | POST   | ❌    | Generates new id, access & refresh token pair using valid refresh token |
 
 ##  🔐 API Flows (ROLE: user)
 
@@ -172,7 +173,9 @@ Request Body:
   "phone_number": "+911234567890",
   "password": "StrongPassword123!",
   "role": "user",
-  "device": "browser"
+  "device": "browser",
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
@@ -211,7 +214,9 @@ Request Body:
   "code": "123456",
   "password": "StrongPassword123!",
   "role": "user",
-  "device": "browser"
+  "device": "browser",
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
@@ -239,7 +244,7 @@ Flow:
             - Returns a flag prompting the user to confirm logout of the previous session.
             - New session is not created until the previous one is revoked (SSO enforcement).
         - If no other session exists:
-            - Creates a new session entry in the DB, tied to user ID and device type.
+             - Creates a new session entry in the DB, tied to user ID, device type, device_id, and ip_address.
             - Stores refresh token and session expiry.
     - Tokens are returned in the response.
 - All errors (invalid code, user not found, etc.) are handled gracefully with structured messages and proper HTTP status codes.
@@ -256,6 +261,8 @@ Request Body:
   "password": "StrongPassword123!",
   "role": "user",
   "device": "browser"               // values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
@@ -287,7 +294,7 @@ Flow:
             - Returns a flag prompting the user to confirm logout of the previous session.
             - New session is not created until the previous one is revoked (SSO enforcement).
         - If no other session exists:
-            - Creates a new session entry in the DB, tied to user ID and device type.
+            - Creates a new session entry in the DB, tied to user ID, device type, device_id, and ip_address.
             - Stores refresh token and session expiry.
         - Tokens are returned in the response.
 - All errors (invalid password, user not found, unverified email/phone) are handled gracefully and returned with appropriate HTTP status codes and messages.
@@ -304,12 +311,17 @@ Request Body:
   "phone_number": "+911234567890",
   "device": "mobile",                 // values: "browser" or "mobile"
   "role": "user"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
 - HTTP 200 OK
-- JSON indicating that OTP was sent successfully
-  e.g., { "message": "OTP sent to your email/phone number." }
+- JSON indicating that OTP was sent successfully 
+  e.g., {
+          "message": "OTP sent to your email/phone number.",
+          "session": "AYABeLMwPRBxLhBp50-tEwnxSREAHQABAAdTZXJ2aWNlABBDb2duaXRvVXNlclBv.."
+        }
 
 Error Responses:
 - HTTP 400 Bad Request → Missing or invalid input fields
@@ -339,8 +351,11 @@ Request Body:
   "email": "jane@example.com",         // OR
   "phone_number": "+911234567890",
   "otp": "123456",
+  "session": "AYABeLMwPRBxLhBp50-tEwnxSREAHQABAAdTZXJ2aWNlABBDb2duaXRvVXNlclBv...",
   "role": "user",
   "device": "browser"                   // values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
@@ -368,7 +383,7 @@ Flow:
         - Returns a flag prompting the user to confirm logout of the previous session.
         - New session is not created until the previous one is revoked (SSO enforcement).
     - If no other session exists:
-        - Creates a new session entry in the DB tied to user ID and device type.
+        - Creates a new session entry in the DB, tied to user ID, device type, device_id, and ip_address.
         - Stores refresh token and session expiry.
     - Access and refresh tokens are returned in the response.
 - All errors (invalid OTP, unverified user, expired OTP, etc.) are handled gracefully with clear messaging and appropriate HTTP status codes.
@@ -385,12 +400,16 @@ Request Body:
   "phone_number": "+911234567890",
   "role": "user",
   "device": "browser"                  // values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
 - HTTP 200 OK  
 - JSON message indicating that the OTP has been sent:
   {
+    "status": "success",
+    "code": 200,
     "message": "OTP sent to your registered email or phone number."
   }
 
@@ -426,12 +445,16 @@ Request Body:
   "new_password": "NewStrongPassword!23",
   "role": "user",
   "device": "browser"                  // values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
 }
 
 Success Response:
 - HTTP 200 OK  
 - JSON message indicating password reset success:
   {
+    "status": "success",
+    "code": 200,
     "message": "Password has been successfully reset."
   }
 
@@ -462,20 +485,28 @@ Description: Retrieves the authenticated user's profile information using the pr
 
 Headers:
 Authorization: Bearer <access_token>
+role: user
+device: browser
+device_id: f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a,
+ip_address: 192.168.1.10
 
 Success Response:
 - HTTP 200 OK  
 - JSON containing user profile data:
-  {
-    "user_id": "uuid-1234-5678",
-    "first_name": "Jane",
-    "last_name": "Doe",
-    "email": "jane@example.com",
-    "phone_number": "+911234567890",
-    "role": "user",
-    "is_email_verified": true,
-    "is_phone_verified": true
-  }
+
+"status": "success",
+"code": 200,
+"message": "User data fetched successfully",
+data: {
+"user_id": "uuid-1234-5678",
+"first_name": "Jane",
+"last_name": "Doe",
+"email": "jane@example.com",
+"phone_number": "+911234567890",
+"role": "user",
+"is_email_verified": true,
+"is_phone_verified": true
+}
 
 Error Responses:
 - HTTP 401 Unauthorized → Missing or invalid token
@@ -493,15 +524,202 @@ Flow:
 - If user record is not found in DB, returns 404 Not Found.
 - Any internal failures (token parsing, DB errors) return 500 with meaningful messages.
 ```
+### Get Session Status (/session/status)
+```text
+Method: GET  
+Description: Checks if a user has an active session on a device and fetches session metadata like IP, device ID, and expiry.
 
-### Confirm Logout of Previous Session (/session/confirm-logout)
-POST /session/confirm-logout
+Headers:
+Authorization: Bearer <access_token>
+role: user
+device: browser
+device_id: f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a,
+ip_address: 192.168.1.10
+
+Success Response:
+- HTTP 200 OK  
+- JSON containing user profile data:
 {
-  "previous_session_id": "uuid-of-old-session",
-  "confirm": true
+  "status": "success",
+  "code": 200,
+  "message": "Active session fetched successfully",
+  "data": {
+    "username": "abcd1234",
+    "session_id": "uu06-uu07-uu08-uu09",
+    "is_active": true,
+    "user_agent": "browser",
+    "ip_address": "192.168.0.1",
+    "device_id": "ABC12345XYZ",
+    "device_type": "browser",
+    "expires_at": "2025-06-30T10:00:00.000Z"
+  }
 }
 
-- Used when a new session attempts to replace an active one
+Error Responses:
+- HTTP 401 Unauthorized → Missing or invalid token
+- HTTP 400 Forbidden → Invalid device or role configuration
+- HTTP 404 Not Found → User record not found
+- HTTP 400 Forbidden → No active sessions found
+- HTTP 500 Internal Server Error → Token decoding or DB-related failure
+
+Flow:
+- Requires a valid JWT access_token in the Authorization header (format: Bearer <token>).
+- The server uses middleware to verify the JWT using AWS Cognito's public keys, ensuring the token's signature and expiry are valid.
+- If the token is invalid or expired, the request is immediately rejected with a 401 Unauthorized response.
+- Upon successful verification, the server extracts the UUID (username) from the token payload.
+- Using this UUID, it queries the users table in PostgreSQL to retrieve user metadata.
+- If a user record does not exist, it returns 404 Not Found.
+- It checks if the device and role values in the headers match the allowed configuration.
+- It searches for an active session in the sessions table using the user ID, and ensures it's valid for the given device and IP.
+- If no active session is found, it returns 400 Bad Request with a message: "No active sessions found"
+- If a valid session is found, it returns: Session details (session ID, device info, IP address, expiry)
+- Any unexpected server errors (e.g., DB connection issues, invalid input format) return a 500 Internal Server Error with a meaningful message.
+```
+
+### Logout Session (/session/logout)
+```text
+Method: POST
+Description: Logs out the user from the current session by invalidating the refresh token and marking the session inactive(is_active: false).
+
+Request Body:
+{
+  "role": "user",
+  "device": "browser",                  // values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
+}
+
+Headers:
+Authorization: Bearer <access_token>    // JWT access token of the logged-in user
+
+Success Response:
+- HTTP 200 OK  
+- JSON message indicating successful logout:
+  {
+    "status": "success",
+    "code": 200,
+    "message": "Logged out successfully"
+  }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid input fields (role, device, device_id, ip_address)
+- HTTP 401 Unauthorized → Missing or invalid JWT token
+- HTTP 404 Not Found → No active session found for the user matching given details
+- HTTP 500 Internal Server Error → AWS Cognito or database failure
+
+Flow:
+- Requires a valid JWT `access_token` in the `Authorization` header.
+- Middleware verifies and attaches `req.user` with the username (UUID) from the token.
+- The API extracts `role`, `device`, `device_id`, and `ip_address` from the request body.
+- Validates all required fields; rejects request if missing or invalid.
+- Calls AWS Cognito's `globalSignOut` API with the access token to invalidate the session (refresh token) on Cognito.
+- Marks the matching session record in the PostgreSQL `sessions` table as inactive (`is_active = false`), matching on user ID, device type, IP, and device ID.
+- If no active session is found for the given criteria, returns 404.
+- If the Cognito token is already expired or invalid, returns a 400 error with message `"Session already expired"`.
+- On success, returns 200 OK with confirmation message.
+- No new sessions or tokens are created; user must log in again for a new session.
+```
+
+### Reset Session (/session/reset)
+```text
+Method: POST  
+Description: Logs in the user by authenticating credentials, invalidating any previous active sessions, and creating a new session record.
+
+Request Body:
+{
+  "username": "user1234",              // Optional if email or phone is provided
+  "email": "jane@example.com",         // Optional if username or phone is provided
+  "phone": "+911234567890",            // Optional if username or email is provided
+  "password": "StrongPassword!23",    // Required for authentication
+  "role": "user",                     // User role for client config (e.g., user, admin)
+  "device": "browser",                 // Device type; allowed values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
+}
+
+Success Response:
+- HTTP 200 OK  
+- JSON with session and token details:
+  {
+    "status": "success",
+    "code": 200,
+    "message": "Logged in successfully",
+    "data": {
+      "username": "user1234",
+      "access_token": "ACCESS_TOKEN",
+      "id_token": "ID_TOKEN",
+      "expires_in": 3600,
+      "refresh_token": "REFRESH_TOKEN",
+      "refresh_expires_in": 2592000,
+      "device": "browser"
+    }
+  }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid inputs (device, role, password, identifier)
+- HTTP 400 Bad Request → Authentication failure due to invalid password
+- HTTP 404 Not Found → User not found in Cognito
+- HTTP 409 Conflict → Email or phone not verified, triggers sending verification OTP
+- HTTP 500 Internal Server Error → AWS Cognito or database errors
+
+Flow:
+- Accepts login identifiers (`username`, `email`, or `phone`) along with `password`, `role`, `device`, `device_id`, and `ip_address`.
+- Validates device type, presence of login identifier, role, password, device ID, and IP address.
+- Determines the identifier type (email, phone, or username) based on input format.
+- Fetches user data from AWS Cognito to verify existence and retrieve attributes.
+- If the user’s email or phone is unverified, sends a verification OTP and returns a verification error.
+- If previous active session exists for the user, authenticates credentials and logs out that session via Cognito global sign-out, marking session inactive in the database.
+- Authenticates the user against Cognito using the password.
+- On successful authentication, generates new tokens and creates a new active session record with expiration based on device type.
+- Returns tokens and session metadata for client use.
+- Handles and propagates errors with meaningful messages for invalid inputs, authentication failures, or internal errors.
+```
+
+### Refresh Tokens (/session/refreshToken)
+```text
+Method: POST  
+Description: Issues new access and ID tokens using a valid refresh token. Used to keep the user logged in without requiring re-authentication.
+
+Request Body:
+{
+  "refresh_token": "eyJraWQiOi...",
+  "username": "user1234",
+  "role": "user",                     // Role used during login (e.g., "user", "admin")
+  "device": "browser",                // Allowed values: "browser" or "mobile"
+  "device_id": "f6b4e58a-9c1d-4a2f-9f8a-1b2e3c4d5f6a",
+  "ip_address": "192.168.1.10"
+}
+
+Success Response:
+- HTTP 200 OK  
+- JSON with newly generated tokens:
+  {
+    "status": "success",
+    "code": 200,
+    "message": "Tokens generated successfully",
+    "data": {
+      "access_token": "<NEW_ACCESS_TOKEN>",
+      "id_token": "<NEW_ID_TOKEN>",
+      "refresh_token": "<SAME_OR_NEW_REFRESH_TOKEN>",
+      "expires_in": 3600,
+      "token_type": "Bearer"
+    }
+  }
+
+Error Responses:
+- HTTP 400 Bad Request → Missing or invalid fields (e.g., refresh token, username, role, device)
+- HTTP 400 Bad Request → Invalid role-device pairing or unsupported device
+- HTTP 401 Unauthorized → Expired or invalid refresh token
+- HTTP 500 Internal Server Error → AWS Cognito service failure or token generation error
+
+Flow:
+- Accepts a valid `refresh_token` along with `username`, `role`, `device`, `device_id`, and `ip_address`.
+- Validates required fields and device type (must be either `browser` or `mobile`).
+- Retrieves client configuration (`CLIENT_ID`, `SECRET_HASH`, etc.) based on `role` and `device`.
+- Uses AWS Cognito’s `initiateAuth` with `REFRESH_TOKEN_AUTH` flow to issue new tokens.
+- If valid, returns fresh `access_token`, `id_token`, and optionally a new `refresh_token`.
+- If refresh token is expired or invalid, instructs the user to log in again.
+```
 
 ## 🚀 Deployment (Serverless Framework / SAM)
 
