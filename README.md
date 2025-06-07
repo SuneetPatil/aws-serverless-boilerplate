@@ -97,6 +97,8 @@ CREATE TABLE sessions (
   user_id UUID NOT NULL,             -- FK to users(id)
   device_type TEXT,                  -- 'browser' or 'mobile'
   refresh_token TEXT,                -- Encrypted refresh token
+  device_id TEXT,                    -- Unique device identifier
+  ip_address TEXT,                   -- IP address of the request origin
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   expires_at TIMESTAMP,              -- Expiry time for session
   is_active BOOLEAN DEFAULT TRUE     -- Flag to enforce SSO
@@ -140,17 +142,20 @@ REFRESH_EXPIRY_MOBILE=2592000    # 30 days
 
 ##  📁 API Reference
 
-| Endpoint                    | Method | Auth | Description                                    |
-|-----------------------------|--------|------|------------------------------------------------|
-| /signup                     | POST   | ❌   | Register with email, phone, and password       |
-| /confirm                    | POST   | ❌   | Confirm signup using OTP                       |
-| /signin                     | POST   | ❌   | Login with password and device info            |
-| /send-otp                   | POST   | ❌   | Send OTP for login                             |
-| /signin-otp                 | POST   | ❌   | Login with OTP (email/phone) and device info   |
-| /forgot-password            | POST   | ❌   | Send OTP for password reset                    |
-| /reset-password             | POST   | ❌   | Reset password using OTP                       |
-| /getuser                    | GET    | ✅   | Admin gets all users, user gets self           |
-| /session/confirm-logout     | POST   | ✅   | Confirm and revoke old session if needed       |
+| Endpoint                  | Method | Auth  | Description                                                              |
+| ------------------------- | ------ | ------| ------------------------------------------------------------------------ |
+| `/signup`                 | POST   | ❌    | Register with email, phone, and password                                |
+| `/confirm`                | POST   | ❌    | Confirm signup using OTP                                                |
+| `/signin`                 | POST   | ❌    | Login with password and device info                                     |
+| `/send-otp`               | POST   | ❌    | Send OTP for login                                                      |
+| `/signin-otp`             | POST   | ❌    | Login with OTP (email/phone) and device info                            |
+| `/forgot-password`        | POST   | ❌    | Send OTP for password reset                                             |
+| `/reset-password`         | POST   | ❌    | Reset password using OTP                                                |
+| `/getuser`                | GET    | ✅    | Admin gets all users, user gets self                                    |
+| `/session/status`         | GET    | ✅    | Check current session status for logged-in user                         |
+| `/session/logout`         | POST   | ✅    | Logs out the current session, revoking refresh tokens                   |
+| `/session/reset`          | POST   | ✅    | Logs out all sessions for a user and creates a new active session       |
+| `/session/refreshToken`   | POST   | ❌    | Generates a new access + refresh token pair using a valid refresh token |
 
 ##  🔐 API Flows (ROLE: user)
 
