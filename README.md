@@ -527,7 +527,7 @@ Flow:
 ### Get Session Status (/session/status)
 ```text
 Method: GET  
-Description: Checks if a user has an active session on a device and fetches session metadata like IP, device ID, and expiry.
+Description: Checks if a user has an active session on a device and fetches session metadata like ip_address, device_id, and expiry.
 
 Headers:
 Authorization: Bearer <access_token>
@@ -550,7 +550,6 @@ Success Response:
     "user_agent": "browser",
     "ip_address": "192.168.0.1",
     "device_id": "ABC12345XYZ",
-    "device_type": "browser",
     "expires_at": "2025-06-30T10:00:00.000Z"
   }
 }
@@ -579,7 +578,7 @@ Flow:
 ### Logout Session (/session/logout)
 ```text
 Method: POST
-Description: Logs out the user from the current session by invalidating the refresh token and marking the session inactive(is_active: false).
+Description: Logs out the user from the current session by invalidating the refresh token and marking the session inactive (is_active: false).
 
 Request Body:
 {
