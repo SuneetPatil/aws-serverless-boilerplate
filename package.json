@@ -39,11 +39,13 @@
   },
   "homepage": "https://github.com/SuneetPatil/aws-serverless-boilerplate#readme",
   "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.21.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.816.0",
     "@neondatabase/serverless": "^1.0.0",
     "amazon-cognito-identity-js": "^6.3.15",
     "aws-sdk": "^2.1692.0",
     "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
@@ -52,14 +54,13 @@
     "pg": "^8.16.0",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.7",
-    "uuid": "^11.1.0",
     "serverless": "^3.40.0",
     "serverless-dotenv-plugin": "^5.0.0",
     "serverless-http": "^3.2.0",
-    "serverless-offline": "^12.0.4"
+    "serverless-offline": "^12.0.4",
+    "uuid": "^11.1.0"
   },
   "directories": {
     "test": "tests"
-  },
-  "devDependencies": {}
+  }
 }

@@ -33,11 +33,11 @@ class ConflictError extends AppError {
 }
 
 class VerificationError extends AppError {
-  constructor(message = "Verification required", attribute = null) {
+  constructor(message = "Verification required", attribute = null, session = null) {
     super(message, 400);
     this.verification_required = true;
-    this.code = "VERIFICATION_REQUIRED";
-    this.attribute = attribute; 
+    this.attribute = attribute;
+    this.session = session;
   }
 }
 

@@ -2,27 +2,60 @@ const serverless = require('serverless-http');
 const app = require('./app');
 const db = require('./db/sequelize.db.js');
 const sql = require('./config/neondb.js');
+const { createLogger } = require('./utils/awsLogger');
+const logger = createLogger('handler');
 
 let isDbConnected = false;
+
 const connectToDatabase = async () => {
-    if (!isDbConnected) {
-        try {
-            await db.sequelize.authenticate();
-            console.log("Sequelize: Connected to DB.");
-            isDbConnected = true;
-            if (sql) {
-                const result = await sql`SELECT version()`;
-                console.log("Neon DB version:", result[0].version);
-            }
-        } catch (error) {
-            console.error("Sequelize DB connection error:", error);
-            throw error;
-        }
+  if (!isDbConnected) {
+    try {
+      logger.info('Attempting DB connection...');
+      await db.sequelize.authenticate();
+      logger.info("Sequelize: Connected to DB successfully.");
+      isDbConnected = true;
+      if (sql) {
+        const result = await sql`SELECT version()`;
+        logger.info("Neon DB version fetched", { version: result[0]?.version });
+      }
+    } catch (error) {
+      logger.error({
+        message: error.message,
+        stack: error.stack
+      });
+      throw error;
     }
+  }
 };
 
+const expressHandler = serverless(app, {
+  request: (request, event, context) => {
+    if (event.body && typeof event.body === 'string') {
+      try {
+        request.body = JSON.parse(event.body);
+      } catch (err) {
+        logger.warn({
+          body: event.body,
+          error: err.message
+        });
+      }
+    }
+    request.lambdaContext = context;
+  },
+});
+
 module.exports.handler = async (event, context) => {
-    console.log("Incoming event:", event);
+  logger.info('Lambda handler invoked', { event, context });
+  try {
     await connectToDatabase();
-    return serverless(app)(event, context);
+    const response = await expressHandler(event, context);
+    logger.info('Lambda handler executed successfully');
+    return response;
+  } catch (error) {
+    logger.error({
+      message: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
 };

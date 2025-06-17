@@ -26,16 +26,16 @@ const errorHandler = (err, req, res, next) => {
       extra.requiresLogoutConfirmation = true;
     }
 
-    // Add `data` only if extra details exist
+    if (err.session) {
+      extra.session = err.session;
+    }
+
     if (Object.keys(extra).length > 0) {
       errorResponse.data = extra;
     }
 
     return res.status(statusCode).json(errorResponse);
   }
-
-  // Log unexpected errors
-  console.error("Unhandled error:", err);
 
   return res.status(500).json({
     status: "error",

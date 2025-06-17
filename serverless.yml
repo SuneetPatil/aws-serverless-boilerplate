@@ -1,0 +1,38 @@
+service: serverless-auth-api-new
+
+frameworkVersion: "3.40.0"
+
+useDotenv: true
+
+plugins:
+  - serverless-dotenv-plugin
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  environment:
+    PGHOST: ${env:PGHOST}
+    PGDATABASE: ${env:PGDATABASE}
+    PGUSER: ${env:PGUSER}
+    PGPASSWORD: ${env:PGPASSWORD}
+    ENDPOINT_ID: ${env:ENDPOINT_ID}
+    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    COGNITO_WEB_USER_CLIENT_ID: ${env:COGNITO_WEB_USER_CLIENT_ID}
+    COGNITO_WEB_USER_CLIENT_SECRET: ${env:COGNITO_WEB_USER_CLIENT_SECRET}
+    TOKEN_EXPIRY_BROWSER: ${env:TOKEN_EXPIRY_BROWSER}
+    TOKEN_EXPIRY_MOBILE: ${env:TOKEN_EXPIRY_MOBILE}
+    REFRESH_EXPIRY_BROWSER: ${env:REFRESH_EXPIRY_BROWSER}
+    REFRESH_EXPIRY_MOBILE: ${env:REFRESH_EXPIRY_MOBILE}
+    AWS_REG: ${env:AWS_REG}
+    AWS_SECRET: ${env:AWS_SECRET}
+    AWS_ACCESS: ${env:AWS_ACCESS}
+    S3_BUCKET_NAME: ${env:S3_BUCKET_NAME}
+
+functions:
+  api:
+    handler: src/handler.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY

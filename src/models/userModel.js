@@ -25,6 +25,9 @@ module.exports = (sequelize) => {
     phone: {
       type: DataTypes.STRING(20),
     },
+    profile_pic_url:{
+      type: DataTypes.STRING(255),
+    },
     role: {
       type: DataTypes.STRING(10),
       defaultValue: 'user',

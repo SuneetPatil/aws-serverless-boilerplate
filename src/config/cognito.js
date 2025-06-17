@@ -1,4 +1,5 @@
 const AWS = require("./aws.js");
+const s3 = new AWS.S3();
 const cognito = new AWS.CognitoIdentityServiceProvider();
 
 const CLIENTS = {
@@ -28,4 +29,4 @@ const CLIENTS = {
     }
 };
 
-module.exports = { cognito, CLIENTS };
+module.exports = { cognito, CLIENTS, s3 };

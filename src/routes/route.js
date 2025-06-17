@@ -4,7 +4,11 @@ const authenticate = require('../middlewares/auth');
 const userController = require('../controllers/userController');
 
 router.get('/test', (req, res) => {
-    res.json({ message: 'API is working!' });
+    res.json({
+        status: 'success',
+        code: 200,
+        message: 'API is working!'
+    });
 });
 
 //singup
@@ -30,5 +34,9 @@ router.get('/session/status', authenticate, userController.sessionStatus);
 router.post('/session/logout', authenticate, userController.logoutSession);
 router.post('/session/reset', userController.resetSession);
 router.post('/session/refreshToken', userController.generateTokens);
+
+//Upload files to S3
+router.post("/generateUploadURL", userController.getUploadUrl);
+router.put('/image', userController.assignImage);
 
 module.exports = router;
